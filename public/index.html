@@ -41,7 +41,10 @@
       };
       // Same "required" rules as the server; everything else the server checks.
       if (!student.name) return showError(msg, "الاسم مطلوب");
-      if (!student.student_id) return showError(msg, "الرقم الجامعي لازم يكون أرقام فقط");
+      // Same rule as the server: digits only (Arabic ٠-٩ and Persian ۰-۹ allowed).
+      const digits = student.student_id.replace(/[٠-٩]/g, (d) => d.charCodeAt(0) - 0x0660)
+                                       .replace(/[۰-۹]/g, (d) => d.charCodeAt(0) - 0x06F0);
+      if (!/^[0-9]+$/.test(digits)) return showError(msg, "الرقم الجامعي لازم يكون أرقام فقط");
       if (!student.major) return showError(msg, "التخصص مطلوب");
       sessionStorage.setItem("student", JSON.stringify(student));
       window.location.href = "/code.html";
