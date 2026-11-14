@@ -10,15 +10,15 @@ The interface is Arabic and right-to-left.
 
 **Doctor**
 - Logs in. Accounts are added manually by the admin (see below).
-- Creates a lecture: the name is required, the time is optional, and the date is set automatically (Yemen time, `Asia/Aden`).
+- Creates a lecture: the name and the major are required, the time is optional, and the date is set automatically (Yemen time, `Asia/Aden`).
 - Starts the session. A random 3-digit code appears and changes every minute until the session stops.
 - The session stops when the doctor presses Stop, or by itself 5 minutes after the last successful student registration (or 5 minutes after start if nobody registered).
 - Starting a lecture stops any other running lecture.
 - Sees the attendance list refresh every 5 seconds (name, student ID, major, status "حاضر").
-- Can add a student by hand (duplicates allowed), edit name, ID or major, delete a student, reopen old lectures, delete a lecture permanently, and download the list as a PDF named `<lecture name> <date>.pdf`.
+- Can add a student by hand (name and ID; the major comes from the lecture; duplicates allowed), edit name, ID or major, delete a student, reopen old lectures, delete a lecture permanently, and download the list as a PDF named `<lecture name> <date>.pdf`.
 
 **Student** (one fixed link)
-1. Enters name, student ID and major.
+1. Enters name and student ID. The major is not typed by the student: every student gets the lecture's major, and the doctor can edit it per student.
 2. Enters the code and sees "تم التحضير".
 
 **Rules enforced by the server**

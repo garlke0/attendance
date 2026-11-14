@@ -32,7 +32,6 @@ def normalize_digits(value: str) -> str:
 class AttendIn(BaseModel):
     name: str = Field(max_length=200)
     student_id: str = Field(max_length=50)
-    major: str = Field(max_length=200)
     code: str = Field(max_length=10)
 
 
@@ -40,16 +39,12 @@ class AttendIn(BaseModel):
 def attend(body: AttendIn, db: Session = Depends(get_db)):
     name = body.name.strip()
     student_id = normalize_digits(body.student_id.strip())
-    major = body.major.strip()
     code = normalize_digits(body.code.strip())
 
     if not name:
         raise HTTPException(422, MSG_NAME)
     if not student_id or not (student_id.isascii() and student_id.isdigit()):
         raise HTTPException(422, MSG_DIGITS)
-    if not major:
-        raise HTTPException(422, MSG_MAJOR)
-
     now = db.scalar(select(func.now()))
 
     # The running session (starting a new one stops the others).
@@ -101,7 +96,8 @@ def attend(body: AttendIn, db: Session = Depends(get_db)):
         raise HTTPException(400, MSG_WRONG.format(n=left))
 
     db.add(
-        Attendance(lecture_id=lec.id, name=name, student_id=student_id, major=major)
+        # The student does not type the major: it comes from the lecture.
+        Attendance(lecture_id=lec.id, name=name, student_id=student_id, major=lec.major)
     )
     db.execute(
         update(Lecture)

@@ -6,8 +6,8 @@ from app import lectures
 from app.models import Attendance, CodeAttempt, Lecture
 
 
-def create(client, name="Networking", time=None):
-    body = {"name": name}
+def create(client, name="Networking", time=None, major="Computer Science"):
+    body = {"name": name, "major": major}
     if time is not None:
         body["lecture_time"] = time
     return client.post("/api/lectures", json=body)
@@ -117,3 +117,14 @@ def test_logged_out_gets_401(client):
 def test_empty_name_message_is_arabic_text(doctor_client):
     r = create(doctor_client, name="")
     assert r.json()["detail"] == "اسم المحاضرة مطلوب"
+
+
+def test_major_required(doctor_client):
+    r = create(doctor_client, major="  ")
+    assert r.status_code == 422 and r.json()["detail"] == "التخصص مطلوب"
+    r = doctor_client.post("/api/lectures", json={"name": "x"})
+    assert r.json()["detail"] == "التخصص مطلوب"
+
+
+def test_major_returned(doctor_client):
+    assert create(doctor_client, major="IT").json()["major"] == "IT"

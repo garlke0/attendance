@@ -4,14 +4,14 @@ from app.pdf import content_disposition, pdf_filename
 
 
 def setup_lecture(c, name="شبكات الحاسوب", time=None):
-    body = {"name": name}
+    body = {"name": name, "major": "علوم الحاسوب"}
     if time:
         body["lecture_time"] = time
     lid = c.post("/api/lectures", json=body).json()["id"]
     c.post(f"/api/lectures/{lid}/attendance",
-           json={"name": "أحمد علي", "student_id": "2023001", "major": "علوم الحاسوب"})
+           json={"name": "أحمد علي", "student_id": "2023001"})
     c.post(f"/api/lectures/{lid}/attendance",
-           json={"name": "Sara Ahmed", "student_id": "2023002", "major": "Computer Science"})
+           json={"name": "Sara Ahmed", "student_id": "2023002"})
     return lid
 
 
@@ -27,16 +27,16 @@ def test_pdf_download(doctor_client):
 
 
 def test_pdf_empty_list_and_no_time(doctor_client):
-    lid = doctor_client.post("/api/lectures", json={"name": "Empty"}).json()["id"]
+    lid = doctor_client.post("/api/lectures", json={"name": "Empty", "major": "CS"}).json()["id"]
     r = doctor_client.get(f"/api/lectures/{lid}/pdf")
     assert r.status_code == 200 and r.content.startswith(b"%PDF")
 
 
 def test_pdf_many_rows(doctor_client):
-    lid = doctor_client.post("/api/lectures", json={"name": "Big"}).json()["id"]
+    lid = doctor_client.post("/api/lectures", json={"name": "Big", "major": "CS"}).json()["id"]
     for i in range(300):
         doctor_client.post(f"/api/lectures/{lid}/attendance",
-                           json={"name": f"طالب {i}", "student_id": str(i), "major": "CS"})
+                           json={"name": f"طالب {i}", "student_id": str(i)})
     r = doctor_client.get(f"/api/lectures/{lid}/pdf")
     assert r.status_code == 200 and r.content.startswith(b"%PDF")
 

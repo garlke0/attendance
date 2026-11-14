@@ -85,7 +85,7 @@ def test_stopped_stays_stopped():
 # ---- /live endpoint ----
 
 def make_running(doctor_client, db):
-    lid = doctor_client.post("/api/lectures", json={"name": "Net"}).json()["id"]
+    lid = doctor_client.post("/api/lectures", json={"name": "Net", "major": "CS"}).json()["id"]
     doctor_client.post(f"/api/lectures/{lid}/start")
     return lid
 

@@ -39,7 +39,6 @@
       <form id="add-form" class="add-form hidden" novalidate>
         <input name="name" placeholder="الاسم" maxlength="200">
         <input name="student_id" placeholder="الرقم الجامعي" maxlength="50" inputmode="numeric">
-        <input name="major" placeholder="التخصص" maxlength="200">
         <button type="submit" class="small">حفظ</button>
         <button type="button" class="secondary small" id="add-cancel">إلغاء</button>
       </form>
@@ -89,6 +88,7 @@
       date.dir = "ltr";
       meta.appendChild(date);
       if (data.lecture_time) meta.append(" — " + data.lecture_time);
+      meta.append(" — " + data.major);
       const code = $("code");
       if (data.code) {
         code.textContent = data.code;
@@ -244,7 +244,6 @@
         await api("POST", base + "/attendance", {
           name: addForm.elements.name.value,
           student_id: addForm.elements.student_id.value,
-          major: addForm.elements.major.value,
         });
         addForm.reset();
         addForm.classList.add("hidden");

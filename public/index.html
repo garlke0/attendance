@@ -17,9 +17,6 @@
         <label for="student_id">الرقم الجامعي</label>
         <input id="student_id" name="student_id" maxlength="50" inputmode="numeric" autocomplete="off" required>
 
-        <label for="major">التخصص</label>
-        <input id="major" name="major" maxlength="200" required>
-
         <button type="submit" class="block">التالي</button>
         <div id="msg" class="msg" role="alert"></div>
       </form>
@@ -31,13 +28,24 @@
     const form = document.getElementById("info-form");
     const msg = document.getElementById("msg");
 
+    // Coming back from the code page with "رجوع": refill what was typed.
+    if (sessionStorage.getItem("editStudent")) {
+      sessionStorage.removeItem("editStudent");
+      try {
+        const saved = JSON.parse(sessionStorage.getItem("student") || "null");
+        if (saved) {
+          form.elements.name.value = saved.name || "";
+          form.elements.student_id.value = saved.student_id || "";
+        }
+      } catch (e) {}
+    }
+
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       clearMsg(msg);
       const student = {
         name: form.elements.name.value.trim(),
         student_id: form.elements.student_id.value.trim(),
-        major: form.elements.major.value.trim(),
       };
       // Same "required" rules as the server; everything else the server checks.
       if (!student.name) return showError(msg, "الاسم مطلوب");
@@ -45,7 +53,6 @@
       const digits = student.student_id.replace(/[٠-٩]/g, (d) => d.charCodeAt(0) - 0x0660)
                                        .replace(/[۰-۹]/g, (d) => d.charCodeAt(0) - 0x06F0);
       if (!/^[0-9]+$/.test(digits)) return showError(msg, "الرقم الجامعي لازم يكون أرقام فقط");
-      if (!student.major) return showError(msg, "التخصص مطلوب");
       sessionStorage.setItem("student", JSON.stringify(student));
       window.location.href = "/code.html";
     });

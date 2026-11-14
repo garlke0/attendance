@@ -16,6 +16,7 @@
                style="text-align:center; font-size:32px; letter-spacing:0.3em; direction:ltr" required>
         <button type="submit" class="block" id="submit">تسجيل الحضور</button>
       </form>
+      <button type="button" class="block secondary" id="back">رجوع لتعديل البيانات</button>
       <div id="msg" class="msg" role="alert"></div>
     </div>
   </main>
@@ -24,7 +25,7 @@
   <script>
     let student = null;
     try { student = JSON.parse(sessionStorage.getItem("student") || "null"); } catch (e) {}
-    if (!student || !student.name || !student.student_id || !student.major) {
+    if (!student || !student.name || !student.student_id) {
       window.location.replace("/");
     }
 
@@ -32,6 +33,12 @@
     const button = document.getElementById("submit");
     const msg = document.getElementById("msg");
     form.elements.code.focus();
+
+    // Back to page 1 with the data filled in, so the student can fix it.
+    document.getElementById("back").addEventListener("click", () => {
+      sessionStorage.setItem("editStudent", "1");
+      window.location.href = "/";
+    });
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -46,6 +53,7 @@
         msg.className = "msg ok";
         form.elements.code.disabled = true;
         button.disabled = true;
+        document.getElementById("back").classList.add("hidden");
       } catch (err) {
         showError(msg, err.message);
         button.disabled = false;

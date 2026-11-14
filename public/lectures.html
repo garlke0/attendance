@@ -19,6 +19,8 @@
       <form id="create-form" novalidate>
         <label for="name">اسم المحاضرة</label>
         <input id="name" name="name" maxlength="200" required>
+        <label for="major">التخصص</label>
+        <input id="major" name="major" maxlength="200" required>
         <label for="lecture_time">الوقت <span class="muted">(اختياري)</span></label>
         <input id="lecture_time" name="lecture_time" maxlength="20">
         <button type="submit" class="block" id="create-btn">إنشاء</button>
@@ -63,6 +65,7 @@
         date.dir = "ltr";
         meta.appendChild(date);
         if (lec.lecture_time) meta.append(" — " + lec.lecture_time);
+        meta.append(" — " + lec.major);
         info.appendChild(meta);
         item.appendChild(info);
 
@@ -108,10 +111,12 @@
       clearMsg(createMsg);
       const name = form.elements.name.value.trim();
       if (!name) return showError(createMsg, "اسم المحاضرة مطلوب");
+      const major = form.elements.major.value.trim();
+      if (!major) return showError(createMsg, "التخصص مطلوب");
       const time = form.elements.lecture_time.value.trim();
       createBtn.disabled = true;
       try {
-        await api("POST", "/api/lectures", { name, lecture_time: time || null });
+        await api("POST", "/api/lectures", { name, major, lecture_time: time || null });
         form.reset();
         await load();
       } catch (err) {

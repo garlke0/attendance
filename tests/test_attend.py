@@ -7,7 +7,7 @@ from app.models import Attendance, Lecture
 
 
 def start_lecture(doctor_client, name="Net"):
-    lid = doctor_client.post("/api/lectures", json={"name": name}).json()["id"]
+    lid = doctor_client.post("/api/lectures", json={"name": name, "major": "Computer Science"}).json()["id"]
     doctor_client.post(f"/api/lectures/{lid}/start")
     return lid
 
@@ -27,10 +27,10 @@ def wrong_code(db, lid):
     return next(f"{i:03d}" for i in range(1000) if f"{i:03d}" not in ok)
 
 
-def send(client, code, sid="2023001", name="أحمد علي", major="Computer Science"):
+def send(client, code, sid="2023001", name="أحمد علي"):
     return client.post(
         "/api/attend",
-        json={"name": name, "student_id": sid, "major": major, "code": code},
+        json={"name": name, "student_id": sid, "code": code},
     )
 
 
@@ -140,10 +140,19 @@ def test_student_id_digits_only(doctor_client, client, db):
         assert r.json()["detail"] == "الرقم الجامعي لازم يكون أرقام فقط"
 
 
-def test_name_and_major_required(doctor_client, client, db):
+def test_name_required(doctor_client, client, db):
     lid = start_lecture(doctor_client)
     assert send(client, good_code(db, lid), name="  ").json()["detail"] == "الاسم مطلوب"
-    assert send(client, good_code(db, lid), major="").json()["detail"] == "التخصص مطلوب"
+
+
+def test_major_comes_from_lecture(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    # even if an old page still sends a major, the lecture's major is used
+    r = client.post("/api/attend", json={"name": "a", "student_id": "5",
+                                         "major": "Other", "code": good_code(db, lid)})
+    assert r.status_code == 200
+    db.expire_all()
+    assert db.scalars(select(Attendance)).one().major == "Computer Science"
 
 
 def test_no_running_lecture(client):

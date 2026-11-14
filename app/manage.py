@@ -64,7 +64,6 @@ def get_own_row(db: Session, row_id: int, doctor: Doctor) -> Attendance:
 class AddIn(BaseModel):
     name: str = Field(max_length=200)
     student_id: str = Field(max_length=50)
-    major: str = Field(max_length=200)
 
 
 class EditIn(BaseModel):
@@ -85,7 +84,7 @@ def add_student(
         lecture_id=lec.id,
         name=clean_name(body.name),
         student_id=clean_student_id(body.student_id),
-        major=clean_major(body.major),
+        major=lec.major,  # same as students; the doctor can edit it afterwards
         added_by_doctor=True,
     )
     db.add(row)

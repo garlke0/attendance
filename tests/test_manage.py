@@ -6,13 +6,13 @@ from app.models import Attendance, Lecture
 
 
 def new_lecture(c, name="Net"):
-    return c.post("/api/lectures", json={"name": name}).json()["id"]
+    return c.post("/api/lectures", json={"name": name, "major": "IT"}).json()["id"]
 
 
-def add(c, lid, name="سارة", sid="2023005", major="IT"):
+def add(c, lid, name="سارة", sid="2023005"):
     return c.post(
         f"/api/lectures/{lid}/attendance",
-        json={"name": name, "student_id": sid, "major": major},
+        json={"name": name, "student_id": sid},
     )
 
 
@@ -56,7 +56,6 @@ def test_add_validation(doctor_client):
     lid = new_lecture(doctor_client)
     assert add(doctor_client, lid, sid="12a").json()["detail"] == "الرقم الجامعي لازم يكون أرقام فقط"
     assert add(doctor_client, lid, name=" ").json()["detail"] == "الاسم مطلوب"
-    assert add(doctor_client, lid, major="").json()["detail"] == "التخصص مطلوب"
     assert add(doctor_client, lid, sid="٢٠٢٣").json()["student_id"] == "2023"
 
 
@@ -125,3 +124,15 @@ def test_logged_out_401(client):
     assert client.post("/api/lectures/1/attendance", json={"name": "a", "student_id": "1", "major": "m"}).status_code == 401
     assert client.patch("/api/attendance/1", json={"name": "a"}).status_code == 401
     assert client.delete("/api/attendance/1").status_code == 401
+
+
+def test_add_by_hand_gets_lecture_major(doctor_client):
+    lid = new_lecture(doctor_client)
+    assert add(doctor_client, lid).json()["major"] == "IT"
+
+
+def test_edit_major_empty_rejected(doctor_client):
+    lid = new_lecture(doctor_client)
+    rid = add(doctor_client, lid).json()["id"]
+    r = doctor_client.patch(f"/api/attendance/{rid}", json={"major": " "})
+    assert r.json()["detail"] == "التخصص مطلوب"

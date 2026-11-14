@@ -27,6 +27,7 @@ def yemen_today() -> date:
 class LectureIn(BaseModel):
     name: str = Field(max_length=200)
     lecture_time: str | None = Field(default=None, max_length=20)
+    major: str = Field(default="", max_length=200)
 
 
 def lecture_out(lec: Lecture) -> dict:
@@ -35,6 +36,7 @@ def lecture_out(lec: Lecture) -> dict:
         "name": lec.name,
         "lecture_date": lec.lecture_date.isoformat(),
         "lecture_time": lec.lecture_time,
+        "major": lec.major,
         "is_running": lec.is_running,
     }
 
@@ -76,11 +78,15 @@ def create_lecture(
     if not name:
         raise HTTPException(422, "اسم المحاضرة مطلوب")
     time_text = (body.lecture_time or "").strip() or None
+    major = body.major.strip()
+    if not major:
+        raise HTTPException(422, "التخصص مطلوب")
     lec = Lecture(
         doctor_id=doctor.id,
         name=name,
         lecture_date=yemen_today(),
         lecture_time=time_text,
+        major=major,
         code_secret=secrets.token_hex(32),
         is_running=False,
     )

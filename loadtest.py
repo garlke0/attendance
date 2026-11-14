@@ -32,7 +32,7 @@ async def main():
         r = await doctor.post("/api/auth/login",
                               json={"username": args.username, "password": password})
         r.raise_for_status()
-        lid = (await doctor.post("/api/lectures", json={"name": "LOAD TEST"})).json()["id"]
+        lid = (await doctor.post("/api/lectures", json={"name": "LOAD TEST", "major": "Load test"})).json()["id"]
         await doctor.post(f"/api/lectures/{lid}/start")
         print(f"Lecture {lid} started. Sending {args.students} students...")
 
@@ -61,7 +61,7 @@ async def main():
                 try:
                     resp = await client.post("/api/attend", json={
                         "name": f"طالب {i}", "student_id": str(900000 + i),
-                        "major": "Load test", "code": code,
+                        "code": code,
                     })
                     results.append((resp.status_code, time.perf_counter() - t,
                                     resp.json().get("detail")))
