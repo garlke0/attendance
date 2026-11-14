@@ -8,14 +8,16 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.auth import current_doctor
+from app.codes import current_code, refresh_running
 from app.db import get_db
-from app.models import CodeAttempt, Doctor, Lecture
+from app.models import Attendance, CodeAttempt, Doctor, Lecture
 
 router = APIRouter(prefix="/api/lectures")
 
 YEMEN_TZ = ZoneInfo("Asia/Aden")
 
 MSG_NOT_FOUND = "المحاضرة غير موجودة"
+STATUS_PRESENT = "حاضر"
 
 
 def yemen_today() -> date:
@@ -37,6 +39,10 @@ def lecture_out(lec: Lecture) -> dict:
     }
 
 
+def db_now(db: Session) -> datetime:
+    return db.scalar(select(func.now()))
+
+
 def get_own_lecture(db: Session, lecture_id: int, doctor: Doctor) -> Lecture:
     lec = db.get(Lecture, lecture_id)
     if lec is None or lec.doctor_id != doctor.id:
@@ -53,6 +59,10 @@ def list_lectures(
         .where(Lecture.doctor_id == doctor.id)
         .order_by(Lecture.lecture_date.desc(), Lecture.id.desc())
     ).all()
+    now = db_now(db)
+    for lec in rows:
+        refresh_running(lec, now)
+    db.commit()
     return [lecture_out(lec) for lec in rows]
 
 
@@ -100,7 +110,7 @@ def start_lecture(
     """Start, or restart after a stop. The attendance list is kept."""
     lec = get_own_lecture(db, lecture_id, doctor)
     lec.is_running = True
-    lec.started_at = db.scalar(select(func.now()))
+    lec.started_at = db_now(db)
     lec.code_secret = secrets.token_hex(32)  # new code sequence on every start
     # Code numbers restart from 0, so old wrong-code counters must not carry over.
     db.execute(delete(CodeAttempt).where(CodeAttempt.lecture_id == lec.id))
@@ -118,3 +128,36 @@ def stop_lecture(
     lec.is_running = False
     db.commit()
     return lecture_out(lec)
+
+
+@router.get("/{lecture_id}/live")
+def live(
+    lecture_id: int,
+    doctor: Doctor = Depends(current_doctor),
+    db: Session = Depends(get_db),
+):
+    """The doctor's screen asks this every 5 seconds:
+    current code (only while running) and the attendance list."""
+    lec = get_own_lecture(db, lecture_id, doctor)
+    now = db_now(db)
+    running = refresh_running(lec, now)
+    db.commit()
+    rows = db.scalars(
+        select(Attendance)
+        .where(Attendance.lecture_id == lec.id)
+        .order_by(Attendance.id)
+    ).all()
+    return {
+        **lecture_out(lec),
+        "code": current_code(lec, now) if running else None,
+        "attendance": [
+            {
+                "id": a.id,
+                "name": a.name,
+                "student_id": a.student_id,
+                "major": a.major,
+                "status": STATUS_PRESENT,
+            }
+            for a in rows
+        ],
+    }
