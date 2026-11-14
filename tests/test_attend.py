@@ -134,7 +134,7 @@ def test_same_student_can_attend_next_lecture(doctor_client, client, db):
 
 def test_student_id_digits_only(doctor_client, client, db):
     lid = start_lecture(doctor_client)
-    for sid in ["12a3", "TP123", "12-3", " ", "١٢٣"]:
+    for sid in ["12a3", "TP123", "12-3", " "]:
         r = send(client, good_code(db, lid), sid=sid)
         assert r.status_code == 422
         assert r.json()["detail"] == "الرقم الجامعي لازم يكون أرقام فقط"
@@ -176,3 +176,22 @@ def test_starting_new_lecture_stops_old(doctor_client, client, db):
     send(client, good_code(db, lid2))
     db.expire_all()
     assert db.scalars(select(Attendance)).one().lecture_id == lid2
+
+
+def test_arabic_and_persian_digits_converted(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    to_ar = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
+    code_ar = good_code(db, lid).translate(to_ar)
+    assert send(client, code_ar, sid="٢٠٢٣٠٠١").status_code == 200
+    db.expire_all()
+    assert db.scalars(select(Attendance)).one().student_id == "2023001"
+    to_fa = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
+    code_fa = good_code(db, lid).translate(to_fa)
+    assert send(client, code_fa, sid="۲۰۲۳۰۰۲").status_code == 200
+
+
+def test_arabic_duplicate_detected(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    send(client, good_code(db, lid), sid="2023001")
+    r = send(client, good_code(db, lid), sid="٢٠٢٣٠٠١")
+    assert r.status_code == 409

@@ -21,6 +21,13 @@ MSG_ALREADY = "تم تسجيل حضورك مسبقاً"
 MSG_NO_TRIES = "استنفدت المحاولات لهذا الكود"
 MSG_WRONG = "الكود غير صحيح، باقي لك {n} محاولات"
 
+# Arabic (٠-٩) and Persian (۰-۹) digits -> 0-9
+_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
+
+
+def normalize_digits(value: str) -> str:
+    return value.translate(_DIGITS)
+
 
 class AttendIn(BaseModel):
     name: str = Field(max_length=200)
@@ -32,9 +39,9 @@ class AttendIn(BaseModel):
 @router.post("/attend")
 def attend(body: AttendIn, db: Session = Depends(get_db)):
     name = body.name.strip()
-    student_id = body.student_id.strip()
+    student_id = normalize_digits(body.student_id.strip())
     major = body.major.strip()
-    code = body.code.strip()
+    code = normalize_digits(body.code.strip())
 
     if not name:
         raise HTTPException(422, MSG_NAME)
