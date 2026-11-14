@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.auth import current_doctor
@@ -109,6 +109,13 @@ def start_lecture(
 ):
     """Start, or restart after a stop. The attendance list is kept."""
     lec = get_own_lecture(db, lecture_id, doctor)
+    # Only one session runs at a time: starting this one stops any other.
+    db.execute(
+        update(Lecture)
+        .where(Lecture.doctor_id == doctor.id, Lecture.id != lec.id)
+        .where(Lecture.is_running.is_(True))
+        .values(is_running=False)
+    )
     lec.is_running = True
     lec.started_at = db_now(db)
     lec.code_secret = secrets.token_hex(32)  # new code sequence on every start

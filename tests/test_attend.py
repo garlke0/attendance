@@ -1,0 +1,178 @@
+from datetime import timedelta
+
+from sqlalchemy import func, select
+
+from app.codes import accepted_codes, code_for, code_window
+from app.models import Attendance, Lecture
+
+
+def start_lecture(doctor_client, name="Net"):
+    lid = doctor_client.post("/api/lectures", json={"name": name}).json()["id"]
+    doctor_client.post(f"/api/lectures/{lid}/start")
+    return lid
+
+
+def good_code(db, lid):
+    db.expire_all()
+    lec = db.get(Lecture, lid)
+    now = db.scalar(select(func.now()))
+    return code_for(lec.code_secret, code_window(lec, now))
+
+
+def wrong_code(db, lid):
+    db.expire_all()
+    lec = db.get(Lecture, lid)
+    now = db.scalar(select(func.now()))
+    ok = accepted_codes(lec, now)
+    return next(f"{i:03d}" for i in range(1000) if f"{i:03d}" not in ok)
+
+
+def send(client, code, sid="2023001", name="أحمد علي", major="Computer Science"):
+    return client.post(
+        "/api/attend",
+        json={"name": name, "student_id": sid, "major": major, "code": code},
+    )
+
+
+def test_correct_code_registers(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    r = send(client, good_code(db, lid))
+    assert r.status_code == 200
+    assert r.json() == {"message": "تم التحضير"}
+    live = doctor_client.get(f"/api/lectures/{lid}/live").json()
+    assert [(a["name"], a["student_id"], a["major"], a["status"]) for a in live["attendance"]] == [
+        ("أحمد علي", "2023001", "Computer Science", "حاضر")
+    ]
+
+
+def test_success_extends_auto_stop(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    send(client, good_code(db, lid))
+    db.expire_all()
+    assert db.get(Lecture, lid).last_success_at is not None
+
+
+def test_wrong_code_not_saved_and_counts_down(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    bad = wrong_code(db, lid)
+    msgs = [send(client, bad).json()["detail"] for _ in range(4)]
+    assert msgs == [
+        "الكود غير صحيح، باقي لك 4 محاولات",
+        "الكود غير صحيح، باقي لك 3 محاولات",
+        "الكود غير صحيح، باقي لك 2 محاولات",
+        "الكود غير صحيح، باقي لك 1 محاولات",
+    ]
+    assert db.scalars(select(Attendance)).all() == []
+
+
+def test_fifth_wrong_then_blocked_even_with_right_code(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    bad = wrong_code(db, lid)
+    for _ in range(4):
+        send(client, bad)
+    r = send(client, bad)
+    assert r.status_code == 429 and r.json()["detail"] == "استنفدت المحاولات لهذا الكود"
+    r = send(client, good_code(db, lid))
+    assert r.status_code == 429
+    assert db.scalars(select(Attendance)).all() == []
+
+
+def test_tries_are_per_student_id(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    bad = wrong_code(db, lid)
+    for _ in range(5):
+        send(client, bad, sid="111")
+    assert send(client, good_code(db, lid), sid="222").status_code == 200
+
+
+def test_new_code_gives_new_tries(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    bad = wrong_code(db, lid)
+    for _ in range(5):
+        send(client, bad)
+    # move the session 70 seconds into the past -> we are on the next code
+    lec = db.get(Lecture, lid)
+    lec.started_at = lec.started_at - timedelta(seconds=70)
+    db.commit()
+    assert send(client, good_code(db, lid)).status_code == 200
+
+
+def test_previous_code_accepted_within_15_seconds(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    lec = db.get(Lecture, lid)
+    lec.started_at = lec.started_at - timedelta(seconds=65)  # 5s into 2nd code
+    db.commit()
+    prev = code_for(lec.code_secret, 0)
+    assert send(client, prev).status_code == 200
+
+
+def test_previous_code_rejected_after_15_seconds(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    lec = db.get(Lecture, lid)
+    lec.started_at = lec.started_at - timedelta(seconds=80)  # 20s into 2nd code
+    db.commit()
+    prev = code_for(lec.code_secret, 0)
+    cur = code_for(lec.code_secret, 1)
+    if prev != cur:
+        assert send(client, prev).status_code == 400
+
+
+def test_register_only_once_per_lecture(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    assert send(client, good_code(db, lid)).status_code == 200
+    r = send(client, good_code(db, lid))
+    assert r.status_code == 409 and r.json()["detail"] == "تم تسجيل حضورك مسبقاً"
+    assert len(db.scalars(select(Attendance)).all()) == 1
+
+
+def test_same_student_can_attend_next_lecture(doctor_client, client, db):
+    lid1 = start_lecture(doctor_client, "L1")
+    send(client, good_code(db, lid1))
+    lid2 = start_lecture(doctor_client, "L2")
+    assert send(client, good_code(db, lid2)).status_code == 200
+
+
+def test_student_id_digits_only(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    for sid in ["12a3", "TP123", "12-3", " ", "١٢٣"]:
+        r = send(client, good_code(db, lid), sid=sid)
+        assert r.status_code == 422
+        assert r.json()["detail"] == "الرقم الجامعي لازم يكون أرقام فقط"
+
+
+def test_name_and_major_required(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    assert send(client, good_code(db, lid), name="  ").json()["detail"] == "الاسم مطلوب"
+    assert send(client, good_code(db, lid), major="").json()["detail"] == "التخصص مطلوب"
+
+
+def test_no_running_lecture(client):
+    r = send(client, "123")
+    assert r.status_code == 410 and r.json()["detail"] == "انتهى وقت التحضير"
+
+
+def test_stopped_lecture_refuses(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    code = good_code(db, lid)
+    doctor_client.post(f"/api/lectures/{lid}/stop")
+    assert send(client, code).status_code == 410
+
+
+def test_auto_stopped_lecture_refuses(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    lec = db.get(Lecture, lid)
+    lec.started_at = lec.started_at - timedelta(minutes=6)
+    db.commit()
+    assert send(client, "000").status_code == 410
+    db.expire_all()
+    assert db.get(Lecture, lid).is_running is False
+
+
+def test_starting_new_lecture_stops_old(doctor_client, client, db):
+    lid1 = start_lecture(doctor_client, "Old")
+    lid2 = start_lecture(doctor_client, "New")
+    lectures = {x["id"]: x["is_running"] for x in doctor_client.get("/api/lectures").json()}
+    assert lectures == {lid1: False, lid2: True}
+    send(client, good_code(db, lid2))
+    db.expire_all()
+    assert db.scalars(select(Attendance)).one().lecture_id == lid2
