@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>المحاضرة</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="page wide">
+    <div class="row" style="margin-bottom:12px">
+      <a href="/lectures.html" class="btn secondary small">→ المحاضرات</a>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <h1 id="title" style="margin:0">...</h1>
+          <div id="meta" class="muted"></div>
+        </div>
+        <span class="spacer"></span>
+        <button type="button" id="start-btn">بدء</button>
+        <button type="button" id="stop-btn" class="danger">إيقاف</button>
+      </div>
+      <div class="code-box">
+        <div id="code" class="code stopped">...</div>
+      </div>
+      <div id="top-msg" class="msg" role="alert"></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-bottom:12px">
+        <h2 style="margin:0">قائمة الحضور <span id="count" class="muted"></span></h2>
+        <span class="spacer"></span>
+        <button type="button" id="add-toggle" class="secondary small">إضافة طالب</button>
+        <a id="pdf-link" class="btn small" href="#">تحميل PDF</a>
+      </div>
+
+      <form id="add-form" class="add-form hidden" novalidate>
+        <input name="name" placeholder="الاسم" maxlength="200">
+        <input name="student_id" placeholder="الرقم الجامعي" maxlength="50" inputmode="numeric">
+        <input name="major" placeholder="التخصص" maxlength="200">
+        <button type="submit" class="small">حفظ</button>
+        <button type="button" class="secondary small" id="add-cancel">إلغاء</button>
+      </form>
+      <div id="list-msg" class="msg" role="alert"></div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>الاسم</th><th>الرقم الجامعي</th><th>التخصص</th><th>الحالة</th><th></th></tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p id="empty" class="muted hidden">لا يوجد حضور بعد</p>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script>
+    const POLL_MS = 5000;
+    const id = new URLSearchParams(window.location.search).get("id");
+    if (!id) window.location.replace("/lectures.html");
+    const base = "/api/lectures/" + encodeURIComponent(id);
+
+    const $ = (sel) => document.getElementById(sel);
+    const topMsg = $("top-msg"), listMsg = $("list-msg");
+    const rowsEl = $("rows"), addForm = $("add-form");
+    $("pdf-link").href = base + "/pdf";
+
+    let editingRowId = null;   // while a row is being edited, the list is not redrawn
+    let lastRows = [];
+    let timer = null;
+
+    function el(tag, className, text) {
+      const e = document.createElement(tag);
+      if (className) e.className = className;
+      if (text !== undefined) e.textContent = text;
+      return e;
+    }
+
+    function renderHeader(data) {
+      $("title").textContent = data.name;
+      document.title = data.name;
+      const meta = $("meta");
+      meta.textContent = "";
+      const date = el("bdi", "", data.lecture_date);
+      date.dir = "ltr";
+      meta.appendChild(date);
+      if (data.lecture_time) meta.append(" — " + data.lecture_time);
+      const code = $("code");
+      if (data.code) {
+        code.textContent = data.code;
+        code.className = "code";
+      } else {
+        code.textContent = "التحضير متوقف";
+        code.className = "code stopped";
+      }
+      $("start-btn").disabled = data.is_running;
+      $("stop-btn").disabled = !data.is_running;
+    }
+
+    function renderRows(rows) {
+      lastRows = rows;
+      $("count").textContent = "(" + rows.length + ")";
+      $("empty").classList.toggle("hidden", rows.length > 0);
+      if (editingRowId !== null) return;
+      rowsEl.innerHTML = "";
+      for (const r of rows) rowsEl.appendChild(viewRow(r));
+    }
+
+    function viewRow(r) {
+      const tr = el("tr");
+      tr.appendChild(el("td", "", r.name));
+      tr.appendChild(el("td", "", r.student_id));
+      tr.appendChild(el("td", "", r.major));
+      tr.appendChild(el("td", "", r.status));
+      const actions = el("td", "actions");
+      const edit = el("button", "secondary small", "تعديل");
+      edit.type = "button";
+      edit.addEventListener("click", () => startEdit(r, tr));
+      const del = el("button", "danger small", "حذف");
+      del.type = "button";
+      del.addEventListener("click", () => removeRow(r, del));
+      actions.append(edit, " ", del);
+      tr.appendChild(actions);
+      return tr;
+    }
+
+    function startEdit(r, tr) {
+      if (editingRowId !== null) return;
+      editingRowId = r.id;
+      const inputs = {};
+      tr.innerHTML = "";
+      for (const [field, max] of [["name", 200], ["student_id", 50], ["major", 200]]) {
+        const td = el("td");
+        const input = el("input");
+        input.value = r[field];
+        input.maxLength = max;
+        if (field === "student_id") input.inputMode = "numeric";
+        inputs[field] = input;
+        td.appendChild(input);
+        tr.appendChild(td);
+      }
+      tr.appendChild(el("td", "", r.status));
+      const actions = el("td", "actions");
+      const save = el("button", "small", "حفظ");
+      save.type = "button";
+      const cancel = el("button", "secondary small", "إلغاء");
+      cancel.type = "button";
+      actions.append(save, " ", cancel);
+      tr.appendChild(actions);
+      inputs.name.focus();
+
+      cancel.addEventListener("click", () => { editingRowId = null; renderRows(lastRows); });
+      save.addEventListener("click", async () => {
+        clearMsg(listMsg);
+        save.disabled = true;
+        try {
+          await api("PATCH", "/api/attendance/" + encodeURIComponent(r.id), {
+            name: inputs.name.value,
+            student_id: inputs.student_id.value,
+            major: inputs.major.value,
+          });
+          editingRowId = null;
+          await refresh();
+        } catch (err) {
+          handleDoctorError(err, (t) => showError(listMsg, t));
+          save.disabled = false;
+        }
+      });
+    }
+
+    async function removeRow(r, button) {
+      button.disabled = true;
+      clearMsg(listMsg);
+      try {
+        await api("DELETE", "/api/attendance/" + encodeURIComponent(r.id));
+        await refresh();
+      } catch (err) {
+        handleDoctorError(err, (t) => showError(listMsg, t));
+        button.disabled = false;
+      }
+    }
+
+    async function refresh() {
+      try {
+        const data = await api("GET", base + "/live");
+        renderHeader(data);
+        renderRows(data.attendance);
+        if (topMsg.dataset.network) { clearMsg(topMsg); delete topMsg.dataset.network; }
+      } catch (err) {
+        if (err.status === 404) {
+          window.location.replace("/lectures.html");
+          return;
+        }
+        handleDoctorError(err, (t) => { showError(topMsg, t); topMsg.dataset.network = "1"; });
+      }
+    }
+
+    // Poll every 5 seconds, only while the page is visible.
+    function startPolling() {
+      if (timer === null) timer = setInterval(refresh, POLL_MS);
+    }
+    function stopPolling() {
+      if (timer !== null) { clearInterval(timer); timer = null; }
+    }
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) { stopPolling(); } else { refresh(); startPolling(); }
+    });
+    window.addEventListener("pagehide", stopPolling);
+
+    async function action(path, button) {
+      button.disabled = true;
+      clearMsg(topMsg);
+      try {
+        renderHeader(await api("POST", base + path));
+        await refresh();
+      } catch (err) {
+        handleDoctorError(err, (t) => showError(topMsg, t));
+        button.disabled = false;
+      }
+    }
+    $("start-btn").addEventListener("click", (e) => action("/start", e.currentTarget));
+    $("stop-btn").addEventListener("click", (e) => action("/stop", e.currentTarget));
+
+    // Add a student by hand
+    $("add-toggle").addEventListener("click", () => {
+      addForm.classList.toggle("hidden");
+      if (!addForm.classList.contains("hidden")) addForm.elements.name.focus();
+    });
+    $("add-cancel").addEventListener("click", () => {
+      addForm.reset();
+      addForm.classList.add("hidden");
+      clearMsg(listMsg);
+    });
+    addForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      clearMsg(listMsg);
+      const submit = addForm.querySelector("button[type=submit]");
+      submit.disabled = true;
+      try {
+        await api("POST", base + "/attendance", {
+          name: addForm.elements.name.value,
+          student_id: addForm.elements.student_id.value,
+          major: addForm.elements.major.value,
+        });
+        addForm.reset();
+        addForm.classList.add("hidden");
+        await refresh();
+      } catch (err) {
+        handleDoctorError(err, (t) => showError(listMsg, t));
+      }
+      submit.disabled = false;
+    });
+
+    refresh();
+    startPolling();
+  </script>
+</body>
+</html>

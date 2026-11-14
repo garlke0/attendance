@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>تسجيل الحضور</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="page">
+    <div class="card">
+      <h1>تسجيل الحضور</h1>
+      <form id="info-form" novalidate>
+        <label for="name">الاسم</label>
+        <input id="name" name="name" maxlength="200" autocomplete="name" required>
+
+        <label for="student_id">الرقم الجامعي</label>
+        <input id="student_id" name="student_id" maxlength="50" inputmode="numeric" autocomplete="off" required>
+
+        <label for="major">التخصص</label>
+        <input id="major" name="major" maxlength="200" required>
+
+        <button type="submit" class="block">التالي</button>
+        <div id="msg" class="msg" role="alert"></div>
+      </form>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script>
+    const form = document.getElementById("info-form");
+    const msg = document.getElementById("msg");
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      clearMsg(msg);
+      const student = {
+        name: form.elements.name.value.trim(),
+        student_id: form.elements.student_id.value.trim(),
+        major: form.elements.major.value.trim(),
+      };
+      // Same "required" rules as the server; everything else the server checks.
+      if (!student.name) return showError(msg, "الاسم مطلوب");
+      if (!student.student_id) return showError(msg, "الرقم الجامعي لازم يكون أرقام فقط");
+      if (!student.major) return showError(msg, "التخصص مطلوب");
+      sessionStorage.setItem("student", JSON.stringify(student));
+      window.location.href = "/code.html";
+    });
+  </script>
+</body>
+</html>

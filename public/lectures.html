@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>المحاضرات</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="page wide">
+    <div class="row" style="margin-bottom:16px">
+      <h1 style="margin:0">المحاضرات</h1>
+      <span class="spacer"></span>
+      <button type="button" class="secondary" id="logout">تسجيل الخروج</button>
+    </div>
+
+    <div class="card">
+      <h2>محاضرة جديدة</h2>
+      <form id="create-form" novalidate>
+        <label for="name">اسم المحاضرة</label>
+        <input id="name" name="name" maxlength="200" required>
+        <label for="lecture_time">الوقت <span class="muted">(اختياري)</span></label>
+        <input id="lecture_time" name="lecture_time" maxlength="20">
+        <button type="submit" class="block" id="create-btn">إنشاء</button>
+        <div id="create-msg" class="msg" role="alert"></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>كل المحاضرات</h2>
+      <div id="list-msg" class="msg" role="alert"></div>
+      <div id="list"><p class="muted">جاري التحميل...</p></div>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script>
+    const list = document.getElementById("list");
+    const listMsg = document.getElementById("list-msg");
+    const form = document.getElementById("create-form");
+    const createBtn = document.getElementById("create-btn");
+    const createMsg = document.getElementById("create-msg");
+
+    function el(tag, className, text) {
+      const e = document.createElement(tag);
+      if (className) e.className = className;
+      if (text !== undefined) e.textContent = text;
+      return e;
+    }
+
+    function render(lectures) {
+      list.innerHTML = "";
+      if (lectures.length === 0) {
+        list.appendChild(el("p", "muted", "لا توجد محاضرات بعد"));
+        return;
+      }
+      for (const lec of lectures) {
+        const item = el("div", "lecture-item");
+        const info = el("div", "info");
+        info.appendChild(el("div", "name", lec.name));
+        const meta = el("div", "muted");
+        const date = el("bdi", "", lec.lecture_date);
+        date.dir = "ltr";
+        meta.appendChild(date);
+        if (lec.lecture_time) meta.append(" — " + lec.lecture_time);
+        info.appendChild(meta);
+        item.appendChild(info);
+
+        item.appendChild(el("span", lec.is_running ? "badge on" : "badge",
+                            lec.is_running ? "التحضير شغال" : "متوقف"));
+
+        const open = el("a", "btn small", "فتح");
+        open.href = "/lecture.html?id=" + encodeURIComponent(lec.id);
+        item.appendChild(open);
+
+        const del = el("button", "danger small", "حذف");
+        del.type = "button";
+        del.addEventListener("click", () => removeLecture(lec, del));
+        item.appendChild(del);
+
+        list.appendChild(item);
+      }
+    }
+
+    async function load() {
+      try {
+        render(await api("GET", "/api/lectures"));
+      } catch (err) {
+        handleDoctorError(err, (t) => showError(listMsg, t));
+      }
+    }
+
+    async function removeLecture(lec, button) {
+      if (!confirm("هل أنت متأكد؟\nسيتم حذف المحاضرة \"" + lec.name + "\" وقائمة حضورها نهائياً.")) return;
+      button.disabled = true;
+      clearMsg(listMsg);
+      try {
+        await api("DELETE", "/api/lectures/" + encodeURIComponent(lec.id));
+        await load();
+      } catch (err) {
+        handleDoctorError(err, (t) => showError(listMsg, t));
+        button.disabled = false;
+      }
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      clearMsg(createMsg);
+      const name = form.elements.name.value.trim();
+      if (!name) return showError(createMsg, "اسم المحاضرة مطلوب");
+      const time = form.elements.lecture_time.value.trim();
+      createBtn.disabled = true;
+      try {
+        await api("POST", "/api/lectures", { name, lecture_time: time || null });
+        form.reset();
+        await load();
+      } catch (err) {
+        handleDoctorError(err, (t) => showError(createMsg, t));
+      }
+      createBtn.disabled = false;
+    });
+
+    document.getElementById("logout").addEventListener("click", async () => {
+      try { await api("POST", "/api/auth/logout"); } catch (e) {}
+      window.location.href = "/login.html";
+    });
+
+    load();
+  </script>
+</body>
+</html>
