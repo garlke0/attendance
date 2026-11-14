@@ -112,3 +112,8 @@ def test_logged_out_gets_401(client):
     assert client.post("/api/lectures", json={"name": "x"}).status_code == 401
     assert client.post("/api/lectures/1/start").status_code == 401
     assert client.delete("/api/lectures/1").status_code == 401
+
+
+def test_empty_name_message_is_arabic_text(doctor_client):
+    r = create(doctor_client, name="")
+    assert r.json()["detail"] == "اسم المحاضرة مطلوب"

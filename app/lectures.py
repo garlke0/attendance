@@ -2,7 +2,7 @@ import secrets
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
@@ -25,7 +25,7 @@ def yemen_today() -> date:
 
 
 class LectureIn(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
+    name: str = Field(max_length=200)
     lecture_time: str | None = Field(default=None, max_length=20)
 
 
@@ -168,3 +168,29 @@ def live(
             for a in rows
         ],
     }
+
+
+@router.get("/{lecture_id}/pdf")
+def download_pdf(
+    lecture_id: int,
+    doctor: Doctor = Depends(current_doctor),
+    db: Session = Depends(get_db),
+):
+    from app.pdf import build_pdf, content_disposition, pdf_filename
+
+    lec = get_own_lecture(db, lecture_id, doctor)
+    rows = db.scalars(
+        select(Attendance)
+        .where(Attendance.lecture_id == lec.id)
+        .order_by(Attendance.id)
+    ).all()
+    date_text = lec.lecture_date.isoformat()
+    data = build_pdf(
+        lec.name, date_text, lec.lecture_time,
+        [(a.name, a.student_id, a.major) for a in rows],
+    )
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={"Content-Disposition": content_disposition(pdf_filename(lec.name, date_text))},
+    )
