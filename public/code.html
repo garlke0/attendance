@@ -17,6 +17,7 @@
         <button type="submit" class="block" id="submit">تسجيل الحضور</button>
       </form>
       <button type="button" class="block secondary" id="back">رجوع لتعديل البيانات</button>
+      <button type="button" class="block secondary hidden" id="done-back">رجوع</button>
       <div id="msg" class="msg" role="alert"></div>
     </div>
   </main>
@@ -33,6 +34,12 @@
     const button = document.getElementById("submit");
     const msg = document.getElementById("msg");
     form.elements.code.focus();
+
+    // After "تم التحضير": back to an empty page 1.
+    document.getElementById("done-back").addEventListener("click", () => {
+      sessionStorage.removeItem("student");
+      window.location.href = "/";
+    });
 
     // Back to page 1 with the data filled in, so the student can fix it.
     document.getElementById("back").addEventListener("click", () => {
@@ -54,6 +61,7 @@
         form.elements.code.disabled = true;
         button.disabled = true;
         document.getElementById("back").classList.add("hidden");
+        document.getElementById("done-back").classList.remove("hidden");
       } catch (err) {
         showError(msg, err.message);
         button.disabled = false;
