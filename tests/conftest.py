@@ -35,3 +35,30 @@ def db():
 @pytest.fixture
 def client():
     return TestClient(app)
+
+
+@pytest.fixture
+def doctor_client(db):
+    """A client already logged in as doctor 'dr'."""
+    from app.models import Doctor
+    from app.security import hash_password
+
+    db.add(Doctor(username="dr", password_hash=hash_password("secret123")))
+    db.commit()
+    c = TestClient(app)
+    r = c.post("/api/auth/login", json={"username": "dr", "password": "secret123"})
+    assert r.status_code == 200
+    return c
+
+
+@pytest.fixture
+def other_doctor_client(db):
+    """A second doctor, to check one doctor cannot touch another's data."""
+    from app.models import Doctor
+    from app.security import hash_password
+
+    db.add(Doctor(username="other", password_hash=hash_password("secret123")))
+    db.commit()
+    c = TestClient(app)
+    c.post("/api/auth/login", json={"username": "other", "password": "secret123"})
+    return c

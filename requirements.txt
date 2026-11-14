@@ -6,3 +6,4 @@ python-dotenv
 reportlab
 arabic-reshaper
 python-bidi
+tzdata
