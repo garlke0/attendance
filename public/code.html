@@ -47,6 +47,20 @@
       window.location.href = "/";
     });
 
+    const LOCATION_NEEDED = "شغّل الموقع وحدّث الصفحة عشان تتحضّر";
+
+    // Ask the phone for its location. Resolves to {lat, lng} or null.
+    function getLocation() {
+      return new Promise((resolve) => {
+        if (!navigator.geolocation) return resolve(null);
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          () => resolve(null),
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+      });
+    }
+
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       clearMsg(msg);
@@ -54,8 +68,14 @@
       if (!code) return showError(msg, "الكود مطلوب");
 
       button.disabled = true;  // stop double taps
+      const coords = await getLocation();
+      if (!coords) {
+        showError(msg, LOCATION_NEEDED);
+        button.disabled = false;
+        return;
+      }
       try {
-        const data = await api("POST", "/api/attend", { ...student, code });
+        const data = await api("POST", "/api/attend", { ...student, code, ...coords });
         msg.textContent = data.message;
         msg.className = "msg ok";
         form.elements.code.disabled = true;

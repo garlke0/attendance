@@ -62,6 +62,8 @@ async def main():
                     resp = await client.post("/api/attend", json={
                         "name": f"طالب {i}", "student_id": str(900000 + i),
                         "code": code,
+                        # campus location (default campus; change if CAMPUS_LAT/LNG differ)
+                        "lat": 3.0550753, "lng": 101.7005763,
                     })
                     results.append((resp.status_code, time.perf_counter() - t,
                                     resp.json().get("detail")))

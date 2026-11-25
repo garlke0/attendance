@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.codes import accepted_codes, code_window, refresh_running
 from app.db import get_db
+from app.location import on_campus, valid_coords
 from app.models import Attendance, CodeAttempt, Lecture
 
 router = APIRouter(prefix="/api")
@@ -20,6 +21,8 @@ MSG_ENDED = "انتهى وقت التحضير"
 MSG_ALREADY = "تم تسجيل حضورك مسبقاً"
 MSG_NO_TRIES = "استنفدت المحاولات لهذا الكود"
 MSG_WRONG = "الكود غير صحيح، باقي لك {n} محاولات"
+MSG_LOCATION_NEEDED = "شغّل الموقع وحدّث الصفحة عشان تتحضّر"
+MSG_NOT_ON_CAMPUS = "انت لست في الجامعة، لم يتم تحضيرك"
 
 # Arabic (٠-٩) and Persian (۰-۹) digits -> 0-9
 _DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
@@ -33,6 +36,9 @@ class AttendIn(BaseModel):
     name: str = Field(max_length=200)
     student_id: str = Field(max_length=50)
     code: str = Field(max_length=10)
+    # Student's phone location (not saved; only checked against the campus)
+    lat: float | None = None
+    lng: float | None = None
 
 
 @router.post("/attend")
@@ -56,6 +62,14 @@ def attend(body: AttendIn, db: Session = Depends(get_db)):
     if lec is None or not refresh_running(lec, now):
         db.commit()  # saves an auto-stop if it just happened
         raise HTTPException(410, MSG_ENDED)
+
+    # Location: checked before the code, so it never uses up a code try.
+    if not valid_coords(body.lat, body.lng):
+        db.rollback()
+        raise HTTPException(422, MSG_LOCATION_NEEDED)
+    if not on_campus(body.lat, body.lng):
+        db.rollback()
+        raise HTTPException(403, MSG_NOT_ON_CAMPUS)
 
     # One request at a time per student per lecture (stops double-taps
     # registering twice); different students are not blocked.

@@ -30,8 +30,20 @@ The interface is Arabic and right-to-left.
 | 5 wrong tries on the current code (a new code gives new tries) | استنفدت المحاولات لهذا الكود |
 | Already registered in this lecture | تم تسجيل حضورك مسبقاً |
 | No running session | انتهى وقت التحضير |
+| Location not allowed or not available on the phone | شغّل الموقع وحدّث الصفحة عشان تتحضّر |
+| More than 500 m from campus | انت لست في الجامعة، لم يتم تحضيرك |
 
 The previous code is still accepted for 15 seconds after it changes, to allow for slow connections.
+
+**Campus location.** When the student submits the code, the page asks the phone for its location and the server checks it is within the campus radius. The location is only checked, never saved, and a location refusal does not use up a code try. The phone's location can be faked with spoofing apps, so this check stops casual cheating, not a determined student. Browsers only share location over HTTPS (or `localhost`).
+
+The campus point is set with environment variables (defaults: APU, Kuala Lumpur, 500 m):
+
+```
+CAMPUS_LAT=3.0550753
+CAMPUS_LNG=101.7005763
+CAMPUS_RADIUS_M=500
+```
 
 Doctor login locks for 5 minutes after 5 wrong passwords. The doctor stays logged in until he logs out.
 

@@ -27,10 +27,14 @@ def wrong_code(db, lid):
     return next(f"{i:03d}" for i in range(1000) if f"{i:03d}" not in ok)
 
 
-def send(client, code, sid="2023001", name="أحمد علي"):
+CAMPUS = (3.0550753, 101.7005763)
+
+
+def send(client, code, sid="2023001", name="أحمد علي", loc=CAMPUS):
     return client.post(
         "/api/attend",
-        json={"name": name, "student_id": sid, "code": code},
+        json={"name": name, "student_id": sid, "code": code,
+              **({"lat": loc[0], "lng": loc[1]} if loc else {})},
     )
 
 
@@ -149,7 +153,8 @@ def test_major_comes_from_lecture(doctor_client, client, db):
     lid = start_lecture(doctor_client)
     # even if an old page still sends a major, the lecture's major is used
     r = client.post("/api/attend", json={"name": "a", "student_id": "5",
-                                         "major": "Other", "code": good_code(db, lid)})
+                                         "major": "Other", "code": good_code(db, lid),
+                                         "lat": CAMPUS[0], "lng": CAMPUS[1]})
     assert r.status_code == 200
     db.expire_all()
     assert db.scalars(select(Attendance)).one().major == "Computer Science"
@@ -204,3 +209,53 @@ def test_arabic_duplicate_detected(doctor_client, client, db):
     send(client, good_code(db, lid), sid="2023001")
     r = send(client, good_code(db, lid), sid="٢٠٢٣٠٠١")
     assert r.status_code == 409
+
+
+# ---- campus location ----
+
+def test_inside_500m_accepted(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    # about 300 m north of campus
+    assert send(client, good_code(db, lid), loc=(3.0577753, 101.7005763)).status_code == 200
+
+
+def test_outside_500m_refused(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    # about 700 m north of campus
+    r = send(client, good_code(db, lid), loc=(3.0613753, 101.7005763))
+    assert r.status_code == 403
+    assert r.json()["detail"] == "انت لست في الجامعة، لم يتم تحضيرك"
+    assert db.scalars(select(Attendance)).all() == []
+
+
+def test_far_away_refused(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    r = send(client, good_code(db, lid), loc=(15.3694, 44.1910))  # Sana'a
+    assert r.json()["detail"] == "انت لست في الجامعة، لم يتم تحضيرك"
+
+
+def test_no_location_refused(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    r = send(client, good_code(db, lid), loc=None)
+    assert r.status_code == 422
+    assert r.json()["detail"] == "شغّل الموقع وحدّث الصفحة عشان تتحضّر"
+
+
+def test_invalid_location_refused(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    r = send(client, good_code(db, lid), loc=(999, 101.7))
+    assert r.json()["detail"] == "شغّل الموقع وحدّث الصفحة عشان تتحضّر"
+
+
+def test_location_refusal_does_not_use_a_try(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    bad = wrong_code(db, lid)
+    for _ in range(5):
+        send(client, bad, loc=(15.3694, 44.1910))  # far away: refused before the code
+    assert send(client, good_code(db, lid)).status_code == 200
+
+
+def test_distance_function():
+    from app.location import distance_m
+    d = distance_m(3.0550753, 101.7005763, 3.0595753, 101.7005763)
+    assert 495 < d < 505  # 0.0045 degrees of latitude is about 500 m
