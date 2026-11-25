@@ -32,8 +32,11 @@ The interface is Arabic and right-to-left.
 | No running session | انتهى وقت التحضير |
 | Location not allowed or not available on the phone | شغّل الموقع وحدّث الصفحة عشان تتحضّر |
 | More than 500 m from campus | انت لست في الجامعة، لم يتم تحضيرك |
+| This phone already registered a different student in this lecture in the last 15 minutes | تم تحضير طالب من هذا الجهاز، حاول بعد ١٥ دقيقة |
 
 The previous code is still accepted for 15 seconds after it changes, to allow for slow connections.
+
+**Device lock.** After a successful registration, the browser gets an HttpOnly `device` cookie (only its hash is stored). For 15 minutes, that browser cannot register a different student in the same lecture. Other lectures are not affected, and the doctor's manual add is not affected. Like any website, this can be bypassed with a private window or another browser; it stops quick "register my friends from my phone", not a determined student.
 
 **Campus location.** When the student submits the code, the page asks the phone for its location and the server checks it is within the campus radius. The location is only checked, never saved, and a location refusal does not use up a code try. The phone's location can be faked with spoofing apps, so this check stops casual cheating, not a determined student. Browsers only share location over HTTPS (or `localhost`).
 

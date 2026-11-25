@@ -72,6 +72,8 @@ class Attendance(Base):
     major: Mapped[str] = mapped_column(String(200))
     # True when the doctor added the student by hand
     added_by_doctor: Mapped[bool] = mapped_column(Boolean, default=False)
+    # SHA-256 of the browser's device cookie (empty for rows added by the doctor)
+    device_hash: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

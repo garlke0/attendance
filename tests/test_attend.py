@@ -30,7 +30,11 @@ def wrong_code(db, lid):
 CAMPUS = (3.0550753, 101.7005763)
 
 
-def send(client, code, sid="2023001", name="أحمد علي", loc=CAMPUS):
+def send(client, code, sid="2023001", name="أحمد علي", loc=CAMPUS, same_device=False):
+    # Each call is a new phone unless same_device=True (the device lock
+    # is tested separately below).
+    if not same_device:
+        client.cookies.clear()
     return client.post(
         "/api/attend",
         json={"name": name, "student_id": sid, "code": code,
@@ -259,3 +263,81 @@ def test_distance_function():
     from app.location import distance_m
     d = distance_m(3.0550753, 101.7005763, 3.0595753, 101.7005763)
     assert 495 < d < 505  # 0.0045 degrees of latitude is about 500 m
+
+
+# ---- device lock (15 minutes, same lecture) ----
+
+LOCK_MSG = "تم تحضير طالب من هذا الجهاز، حاول بعد ١٥ دقيقة"
+
+
+def test_device_cookie_set_on_success(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    r = send(client, good_code(db, lid), sid="1")
+    assert r.status_code == 200
+    set_cookie = r.headers["set-cookie"].lower()
+    assert "device=" in set_cookie and "httponly" in set_cookie
+    db.expire_all()
+    row = db.scalars(select(Attendance)).one()
+    assert row.device_hash and row.device_hash != client.cookies.get("device")  # only the hash is stored
+
+
+def test_same_device_other_student_same_lecture_refused(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    assert send(client, good_code(db, lid), sid="1").status_code == 200
+    r = send(client, good_code(db, lid), sid="2", same_device=True)
+    assert r.status_code == 429 and r.json()["detail"] == LOCK_MSG
+    assert len(db.scalars(select(Attendance)).all()) == 1
+
+
+def test_same_device_same_student_gets_already_registered(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    send(client, good_code(db, lid), sid="1")
+    r = send(client, good_code(db, lid), sid="1", same_device=True)
+    assert r.json()["detail"] == "تم تسجيل حضورك مسبقاً"
+
+
+def test_same_device_allowed_after_15_minutes(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    send(client, good_code(db, lid), sid="1")
+    row = db.scalars(select(Attendance)).one()
+    row.created_at = row.created_at - timedelta(minutes=15, seconds=1)
+    db.commit()
+    assert send(client, good_code(db, lid), sid="2", same_device=True).status_code == 200
+
+
+def test_same_device_other_lecture_allowed(doctor_client, client, db):
+    lid1 = start_lecture(doctor_client, "L1")
+    send(client, good_code(db, lid1), sid="1")
+    lid2 = start_lecture(doctor_client, "L2")
+    assert send(client, good_code(db, lid2), sid="2", same_device=True).status_code == 200
+
+
+def test_other_device_not_affected(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    send(client, good_code(db, lid), sid="1")
+    assert send(client, good_code(db, lid), sid="2").status_code == 200  # new phone
+
+
+def test_device_lock_does_not_use_a_try(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    send(client, good_code(db, lid), sid="1")
+    bad = wrong_code(db, lid)
+    for _ in range(5):
+        r = send(client, bad, sid="2", same_device=True)
+        assert r.json()["detail"] == LOCK_MSG
+    assert send(client, good_code(db, lid), sid="2").status_code == 200  # from another phone
+
+
+def test_doctor_deleting_row_unlocks_device(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    send(client, good_code(db, lid), sid="1")
+    rid = db.scalars(select(Attendance)).one().id
+    doctor_client.delete(f"/api/attendance/{rid}")
+    assert send(client, good_code(db, lid), sid="2", same_device=True).status_code == 200
+
+
+def test_doctor_manual_add_not_affected(doctor_client, client, db):
+    lid = start_lecture(doctor_client)
+    send(client, good_code(db, lid), sid="1")
+    r = doctor_client.post(f"/api/lectures/{lid}/attendance", json={"name": "x", "student_id": "2"})
+    assert r.status_code == 200

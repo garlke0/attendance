@@ -53,12 +53,15 @@ async def main():
         sem = asyncio.Semaphore(args.concurrency)
         results = []
 
-        async def student(i, client):
+        async def student(i, transport):
             async with sem:
                 # The student reads the code off the doctor's screen
                 code = (await doctor.get(f"/api/lectures/{lid}/live")).json()["code"]
                 t = time.perf_counter()
                 try:
+                    # Each student is a separate phone: own cookies, shared connections.
+                    # (Not closed on purpose: closing it would close the shared transport.)
+                    client = httpx.AsyncClient(base_url=base, timeout=60, transport=transport)
                     resp = await client.post("/api/attend", json={
                         "name": f"طالب {i}", "student_id": str(900000 + i),
                         "code": code,
@@ -73,8 +76,8 @@ async def main():
         start = time.perf_counter()
         screen = asyncio.create_task(doctor_screen())
         limits = httpx.Limits(max_connections=args.concurrency)
-        async with httpx.AsyncClient(base_url=base, timeout=60, limits=limits) as client:
-            await asyncio.gather(*(student(i, client) for i in range(1, args.students + 1)))
+        async with httpx.AsyncHTTPTransport(limits=limits) as transport:
+            await asyncio.gather(*(student(i, transport) for i in range(1, args.students + 1)))
         total = time.perf_counter() - start
         done.set()
         polls = await screen

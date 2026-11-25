@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+import os
+from datetime import timedelta
+
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
@@ -7,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.codes import accepted_codes, code_window, refresh_running
 from app.db import get_db
 from app.location import on_campus, valid_coords
+from app.security import hash_token, new_session_token
 from app.models import Attendance, CodeAttempt, Lecture
 
 router = APIRouter(prefix="/api")
@@ -23,6 +27,14 @@ MSG_NO_TRIES = "استنفدت المحاولات لهذا الكود"
 MSG_WRONG = "الكود غير صحيح، باقي لك {n} محاولات"
 MSG_LOCATION_NEEDED = "شغّل الموقع وحدّث الصفحة عشان تتحضّر"
 MSG_NOT_ON_CAMPUS = "انت لست في الجامعة، لم يتم تحضيرك"
+MSG_DEVICE_LOCKED = "تم تحضير طالب من هذا الجهاز، حاول بعد ١٥ دقيقة"
+
+# One device (browser) can register only one student per lecture
+# within 15 minutes of its last successful registration.
+DEVICE_COOKIE = "device"
+DEVICE_LOCK = timedelta(minutes=15)
+DEVICE_COOKIE_MAX_AGE = 400 * 24 * 60 * 60
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() != "false"
 
 # Arabic (٠-٩) and Persian (۰-۹) digits -> 0-9
 _DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
@@ -42,7 +54,12 @@ class AttendIn(BaseModel):
 
 
 @router.post("/attend")
-def attend(body: AttendIn, db: Session = Depends(get_db)):
+def attend(
+    body: AttendIn,
+    response: Response,
+    device: str | None = Cookie(default=None),
+    db: Session = Depends(get_db),
+):
     name = body.name.strip()
     student_id = normalize_digits(body.student_id.strip())
     code = normalize_digits(body.code.strip())
@@ -70,6 +87,26 @@ def attend(body: AttendIn, db: Session = Depends(get_db)):
     if not on_campus(body.lat, body.lng):
         db.rollback()
         raise HTTPException(403, MSG_NOT_ON_CAMPUS)
+
+    # Device lock: same browser, same lecture, a different student,
+    # within 15 minutes of that browser's last successful registration.
+    device_hash = hash_token(device) if device else None
+    if device_hash:
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+            {"k": f"device:{lec.id}:{device_hash}"},
+        )
+        locked = db.scalar(
+            select(Attendance.id).where(
+                Attendance.lecture_id == lec.id,
+                Attendance.device_hash == device_hash,
+                Attendance.student_id != student_id,
+                Attendance.created_at > now - DEVICE_LOCK,
+            )
+        )
+        if locked:
+            db.rollback()
+            raise HTTPException(429, MSG_DEVICE_LOCKED)
 
     # One request at a time per student per lecture (stops double-taps
     # registering twice); different students are not blocked.
@@ -109,9 +146,18 @@ def attend(body: AttendIn, db: Session = Depends(get_db)):
             raise HTTPException(429, MSG_NO_TRIES)
         raise HTTPException(400, MSG_WRONG.format(n=left))
 
+    if not device:
+        # First registration from this browser: give it a device cookie.
+        device = new_session_token()
+        device_hash = hash_token(device)
+        response.set_cookie(
+            DEVICE_COOKIE, device, max_age=DEVICE_COOKIE_MAX_AGE,
+            httponly=True, secure=COOKIE_SECURE, samesite="lax", path="/",
+        )
     db.add(
         # The student does not type the major: it comes from the lecture.
-        Attendance(lecture_id=lec.id, name=name, student_id=student_id, major=lec.major)
+        Attendance(lecture_id=lec.id, name=name, student_id=student_id,
+                   major=lec.major, device_hash=device_hash, created_at=now)
     )
     db.execute(
         update(Lecture)
