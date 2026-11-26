@@ -23,6 +23,7 @@
         <input id="major" name="major" maxlength="200" required>
         <label for="lecture_time">الوقت <span class="muted">(اختياري)</span></label>
         <input id="lecture_time" name="lecture_time" maxlength="20">
+        <label class="check"><input type="checkbox" id="is_online" name="is_online"> محاضرة أونلاين <span class="muted">(بدون موقع الطالب)</span></label>
         <button type="submit" class="block" id="create-btn">إنشاء</button>
         <div id="create-msg" class="msg" role="alert"></div>
       </form>
@@ -66,6 +67,7 @@
         meta.appendChild(date);
         if (lec.lecture_time) meta.append(" — " + lec.lecture_time);
         meta.append(" — " + lec.major);
+        if (lec.is_online) meta.append(" — أونلاين");
         info.appendChild(meta);
         item.appendChild(info);
 
@@ -116,7 +118,7 @@
       const time = form.elements.lecture_time.value.trim();
       createBtn.disabled = true;
       try {
-        await api("POST", "/api/lectures", { name, major, lecture_time: time || null });
+        await api("POST", "/api/lectures", { name, major, lecture_time: time || null, is_online: form.elements.is_online.checked });
         form.reset();
         await load();
       } catch (err) {

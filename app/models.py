@@ -51,6 +51,8 @@ class Lecture(Base):
     lecture_date: Mapped[date] = mapped_column(Date)  # set automatically, Yemen time
     lecture_time: Mapped[str | None] = mapped_column(String(20))  # optional
     major: Mapped[str] = mapped_column(String(200))  # set by the doctor
+    # Online lecture: students are not asked for their location
+    is_online: Mapped[bool] = mapped_column(Boolean, default=False)
     # Secret used to generate the 3-digit code for each minute
     code_secret: Mapped[str] = mapped_column(String(64))
     is_running: Mapped[bool] = mapped_column(Boolean, default=False)

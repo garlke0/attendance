@@ -28,6 +28,7 @@ class LectureIn(BaseModel):
     name: str = Field(max_length=200)
     lecture_time: str | None = Field(default=None, max_length=20)
     major: str = Field(default="", max_length=200)
+    is_online: bool = False
 
 
 def lecture_out(lec: Lecture) -> dict:
@@ -37,6 +38,7 @@ def lecture_out(lec: Lecture) -> dict:
         "lecture_date": lec.lecture_date.isoformat(),
         "lecture_time": lec.lecture_time,
         "major": lec.major,
+        "is_online": lec.is_online,
         "is_running": lec.is_running,
     }
 
@@ -87,6 +89,7 @@ def create_lecture(
         lecture_date=yemen_today(),
         lecture_time=time_text,
         major=major,
+        is_online=body.is_online,
         code_secret=secrets.token_hex(32),
         is_running=False,
     )

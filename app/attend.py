@@ -80,13 +80,16 @@ def attend(
         db.commit()  # saves an auto-stop if it just happened
         raise HTTPException(410, MSG_ENDED)
 
-    # Location: checked before the code, so it never uses up a code try.
-    if not valid_coords(body.lat, body.lng):
-        db.rollback()
-        raise HTTPException(422, MSG_LOCATION_NEEDED)
-    if not on_campus(body.lat, body.lng):
-        db.rollback()
-        raise HTTPException(403, MSG_NOT_ON_CAMPUS)
+    # Location (in-person lectures only): checked before the code, so it
+    # never uses up a code try. 428 tells the page "ask for the location
+    # and send again"; online lectures skip this completely.
+    if not lec.is_online:
+        if not valid_coords(body.lat, body.lng):
+            db.rollback()
+            raise HTTPException(428, MSG_LOCATION_NEEDED)
+        if not on_campus(body.lat, body.lng):
+            db.rollback()
+            raise HTTPException(403, MSG_NOT_ON_CAMPUS)
 
     # Device lock: same browser, same lecture, a different student,
     # within 15 minutes of that browser's last successful registration.

@@ -10,7 +10,7 @@ The interface is Arabic and right-to-left.
 
 **Doctor**
 - Logs in. Accounts are added manually by the admin (see below).
-- Creates a lecture: the name and the major are required, the time is optional, and the date is set automatically (Yemen time, `Asia/Aden`).
+- Creates a lecture: the name and the major are required, the time is optional, and the date is set automatically (Yemen time, `Asia/Aden`). The doctor can mark it **online**: students in an online lecture are not asked for their location.
 - Starts the session. A random 3-digit code appears and changes every minute until the session stops.
 - The session stops when the doctor presses Stop, or by itself 5 minutes after the last successful student registration (or 5 minutes after start if nobody registered).
 - Starting a lecture stops any other running lecture.
@@ -38,7 +38,7 @@ The previous code is still accepted for 15 seconds after it changes, to allow fo
 
 **Device lock.** After a successful registration, the browser gets an HttpOnly `device` cookie (only its hash is stored). For 15 minutes, that browser cannot register a different student in the same lecture. Other lectures are not affected, and the doctor's manual add is not affected. Like any website, this can be bypassed with a private window or another browser; it stops quick "register my friends from my phone", not a determined student.
 
-**Campus location.** When the student submits the code, the page asks the phone for its location and the server checks it is within the campus radius. The location is only checked, never saved, and a location refusal does not use up a code try. The phone's location can be faked with spoofing apps, so this check stops casual cheating, not a determined student. Browsers only share location over HTTPS (or `localhost`).
+**Campus location** (in-person lectures only). When the student submits the code, the server answers 428 if it needs the location; the page then asks the phone for its location and the server checks it is within the campus radius. The location is only checked, never saved, and a location refusal does not use up a code try. The phone's location can be faked with spoofing apps, so this check stops casual cheating, not a determined student. Browsers only share location over HTTPS (or `localhost`).
 
 The campus point is set with environment variables (defaults: APU, Kuala Lumpur, 500 m):
 

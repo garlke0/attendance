@@ -68,14 +68,18 @@
       if (!code) return showError(msg, "الكود مطلوب");
 
       button.disabled = true;  // stop double taps
-      const coords = await getLocation();
-      if (!coords) {
-        showError(msg, LOCATION_NEEDED);
-        button.disabled = false;
-        return;
-      }
       try {
-        const data = await api("POST", "/api/attend", { ...student, code, ...coords });
+        let data;
+        try {
+          // Online lectures need no location: try without it first.
+          data = await api("POST", "/api/attend", { ...student, code });
+        } catch (err) {
+          if (err.status !== 428) throw err;
+          // In-person lecture: the server asks for the location.
+          const coords = await getLocation();
+          if (!coords) throw new ApiError(428, LOCATION_NEEDED);
+          data = await api("POST", "/api/attend", { ...student, code, ...coords });
+        }
         msg.textContent = data.message;
         msg.className = "msg ok";
         form.elements.code.disabled = true;

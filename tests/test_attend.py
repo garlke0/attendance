@@ -241,7 +241,7 @@ def test_far_away_refused(doctor_client, client, db):
 def test_no_location_refused(doctor_client, client, db):
     lid = start_lecture(doctor_client)
     r = send(client, good_code(db, lid), loc=None)
-    assert r.status_code == 422
+    assert r.status_code == 428
     assert r.json()["detail"] == "شغّل الموقع وحدّث الصفحة عشان تتحضّر"
 
 
@@ -341,3 +341,35 @@ def test_doctor_manual_add_not_affected(doctor_client, client, db):
     send(client, good_code(db, lid), sid="1")
     r = doctor_client.post(f"/api/lectures/{lid}/attendance", json={"name": "x", "student_id": "2"})
     assert r.status_code == 200
+
+
+# ---- online lectures (no location) ----
+
+def start_online(doctor_client, name="Online"):
+    lid = doctor_client.post("/api/lectures", json={"name": name, "major": "CS", "is_online": True}).json()["id"]
+    doctor_client.post(f"/api/lectures/{lid}/start")
+    return lid
+
+
+def test_online_lecture_needs_no_location(doctor_client, client, db):
+    lid = start_online(doctor_client)
+    assert send(client, good_code(db, lid), loc=None).status_code == 200
+
+
+def test_online_lecture_accepts_far_location(doctor_client, client, db):
+    lid = start_online(doctor_client)
+    assert send(client, good_code(db, lid), loc=(15.3694, 44.1910)).status_code == 200
+
+
+def test_online_lecture_keeps_other_rules(doctor_client, client, db):
+    lid = start_online(doctor_client)
+    bad = wrong_code(db, lid)
+    assert send(client, bad, loc=None).json()["detail"] == "الكود غير صحيح، باقي لك 4 محاولات"
+    send(client, good_code(db, lid), sid="1", loc=None)
+    r = send(client, good_code(db, lid), sid="2", loc=None, same_device=True)
+    assert r.json()["detail"] == LOCK_MSG
+
+
+def test_in_person_is_default(doctor_client):
+    r = doctor_client.post("/api/lectures", json={"name": "x", "major": "CS"})
+    assert r.json()["is_online"] is False

@@ -89,6 +89,7 @@
       meta.appendChild(date);
       if (data.lecture_time) meta.append(" — " + data.lecture_time);
       meta.append(" — " + data.major);
+      if (data.is_online) meta.append(" — أونلاين");
       const code = $("code");
       if (data.code) {
         code.textContent = data.code;
