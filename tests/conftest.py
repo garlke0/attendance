@@ -6,6 +6,10 @@ from dotenv import load_dotenv
 load_dotenv()
 os.environ["DATABASE_URL"] = os.environ["TEST_DATABASE_URL"]
 os.environ["COOKIE_SECURE"] = "false"
+# Tests always use the APU point, whatever campus is set in .env for demos.
+os.environ["CAMPUS_LAT"] = "3.0550753"
+os.environ["CAMPUS_LNG"] = "101.7005763"
+os.environ["CAMPUS_RADIUS_M"] = "500"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
